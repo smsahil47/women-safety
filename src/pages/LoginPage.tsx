@@ -8,11 +8,12 @@ const Spinner = () => (
 );
 
 const LoginPage: React.FC = () => {
-    const { login, isLoading } = useApp();
+    const { login, resetPassword, isLoading } = useApp();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPw, setShowPw] = useState(false);
+    const [isForgot, setIsForgot] = useState(false);
     const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
     const validate = () => {
@@ -25,6 +26,21 @@ const LoginPage: React.FC = () => {
 
     const submit = async (ev: React.FormEvent) => {
         ev.preventDefault();
+        
+        if (isForgot) {
+            const e: { email?: string } = {};
+            if (!email) e.email = 'Email is required';
+            else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email';
+            setErrors(e);
+            if (Object.keys(e).length) return;
+
+            try {
+                await resetPassword(email);
+                setIsForgot(false);
+            } catch (err) {}
+            return;
+        }
+
         if (!validate()) return;
         try {
             await login(email, password);
@@ -81,8 +97,12 @@ const LoginPage: React.FC = () => {
             <div className="auth-right">
                 <div style={{ width: '100%', maxWidth: 380 }}>
                     <div className="fade-up" style={{ marginBottom: 28 }}>
-                        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Sign in</h2>
-                        <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Welcome back to SafeRoute</p>
+                        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                            {isForgot ? 'Reset Password' : 'Sign in'}
+                        </h2>
+                        <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                            {isForgot ? 'Enter your email to receive a reset link' : 'Welcome back to SafeRoute'}
+                        </p>
                     </div>
 
                     <form onSubmit={submit} className="fade-up d1" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -98,50 +118,61 @@ const LoginPage: React.FC = () => {
                             {errors.email && <span className="err-msg">{errors.email}</span>}
                         </div>
 
-                        <div className="field">
-                            <div className="flex justify-between items-center" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                <label className="label-text" style={{ marginBottom: 0 }}>Password</label>
-                                <a href="#" style={{ fontSize: 12, color: 'var(--indigo)', textDecoration: 'none' }}>Forgot?</a>
+                        {!isForgot && (
+                            <div className="field">
+                                <div className="flex justify-between items-center" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                    <label className="label-text" style={{ marginBottom: 0 }}>Password</label>
+                                    <button type="button" onClick={() => setIsForgot(true)} style={{ fontSize: 12, color: 'var(--indigo)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Forgot?</button>
+                                </div>
+                                <div className="input-wrap">
+                                    <Lock size={14} className="ic" />
+                                    <input id="login-password" type={showPw ? 'text' : 'password'}
+                                        value={password} onChange={e => setPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        className={`input has-icon${errors.password ? ' err' : ''}`}
+                                        style={{ paddingRight: 36 }} />
+                                    <button type="button" onClick={() => setShowPw(!showPw)}
+                                        className="no-btn"
+                                        style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}>
+                                        {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                                    </button>
+                                </div>
+                                {errors.password && <span className="err-msg">{errors.password}</span>}
                             </div>
-                            <div className="input-wrap">
-                                <Lock size={14} className="ic" />
-                                <input id="login-password" type={showPw ? 'text' : 'password'}
-                                    value={password} onChange={e => setPassword(e.target.value)}
-                                    placeholder="••••••••"
-                                    className={`input has-icon${errors.password ? ' err' : ''}`}
-                                    style={{ paddingRight: 36 }} />
-                                <button type="button" onClick={() => setShowPw(!showPw)}
-                                    className="no-btn"
-                                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}>
-                                    {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                                </button>
-                            </div>
-                            {errors.password && <span className="err-msg">{errors.password}</span>}
-                        </div>
+                        )}
 
                         <button type="submit" id="login-submit" disabled={isLoading}
                             className="btn btn-primary btn-full" style={{ marginTop: 4, gap: 8 }}>
                             {isLoading ? <Spinner /> : null}
-                            {isLoading ? 'Signing in…' : 'Sign In'}
-                            {!isLoading && <ArrowRight size={15} />}
+                            {isForgot ? (isLoading ? 'Sending...' : 'Send Reset Link') : (isLoading ? 'Signing in…' : 'Sign In')}
+                            {!isLoading && !isForgot && <ArrowRight size={15} />}
                         </button>
                     </form>
 
-                    <div className="fade-up d2" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
-                        <div className="divider" style={{ flex: 1 }} />
-                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>or</span>
-                        <div className="divider" style={{ flex: 1 }} />
-                    </div>
+                    {!isForgot ? (
+                        <>
+                            <div className="fade-up d2" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
+                                <div className="divider" style={{ flex: 1 }} />
+                                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>or</span>
+                                <div className="divider" style={{ flex: 1 }} />
+                            </div>
 
-                    <button onClick={demo} disabled={isLoading} id="demo-login"
-                        className="btn btn-outline btn-full fade-up d2" style={{ gap: 8 }}>
-                        Try Demo Account
-                    </button>
+                            <button onClick={demo} disabled={isLoading} id="demo-login"
+                                className="btn btn-outline btn-full fade-up d2" style={{ gap: 8 }}>
+                                Try Demo Account
+                            </button>
 
-                    <p className="fade-up d3" style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-2)', marginTop: 24 }}>
-                        Don't have an account?{' '}
-                        <Link to="/register" style={{ color: 'var(--indigo)', fontWeight: 500, textDecoration: 'none' }}>Create account</Link>
-                    </p>
+                            <p className="fade-up d3" style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-2)', marginTop: 24 }}>
+                                Don't have an account?{' '}
+                                <Link to="/register" style={{ color: 'var(--indigo)', fontWeight: 500, textDecoration: 'none' }}>Create account</Link>
+                            </p>
+                        </>
+                    ) : (
+                        <p className="fade-up d2" style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-2)', marginTop: 24 }}>
+                            Remembered your password?{' '}
+                            <button type="button" onClick={() => setIsForgot(false)} style={{ color: 'var(--indigo)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Back to login</button>
+                        </p>
+                    )}
                 </div>
             </div>
         </div>

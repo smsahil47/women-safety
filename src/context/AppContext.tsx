@@ -11,6 +11,7 @@ interface AppContextType {
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
     register: (data: { name: string; email: string; phone: string; password: string }) => Promise<void>;
+    resetPassword: (email: string) => Promise<void>;
 
     // Emergency Contacts
     contacts: EmergencyContact[];
@@ -150,6 +151,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [addToast]);
 
+    const resetPassword = useCallback(async (email: string) => {
+        setIsLoading(true);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${window.location.origin}/update-password`,
+            });
+            if (error) throw error;
+            addToast('Password reset link sent to your email!', 'success');
+        } catch (err: any) {
+            addToast(err.message || 'Failed to send reset link', 'error');
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [addToast]);
+
     const logout = useCallback(async () => {
         await supabase.auth.signOut();
         setSosStatus('idle');
@@ -213,7 +230,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // ── Context Value ───────────────────────────────────────────────────────────
 
     const value: AppContextType = {
-        user, isAuthenticated, login, logout, register,
+        user, isAuthenticated, login, logout, register, resetPassword,
         contacts, addContact, removeContact,
         trackingSession, startTracking, stopTracking,
         sosStatus, triggerSOS, cancelSOS, resetSOS,
