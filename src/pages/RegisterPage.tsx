@@ -59,8 +59,12 @@ const RegisterPage: React.FC = () => {
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!validate(3)) return;
-        await register({ email: form.email, password: form.password, name: form.name, phone: form.phone });
-        navigate('/dashboard');
+        try {
+            await register({ email: form.email, password: form.password, name: form.name, phone: form.phone });
+            navigate('/dashboard');
+        } catch (err) {
+            // Expected error structure already handled in Context Toast
+        }
     };
 
     const inputCls = (k: keyof RegErrors) => `input has-icon${errors[k] ? ' err' : ''}`;
@@ -80,8 +84,8 @@ const RegisterPage: React.FC = () => {
                     <p style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.7 }}>
                         Join SafeRoute to access AI-powered safety features, live tracking, and community-based safety reports.
                     </p>
-                    <div style={{ marginTop: 24, padding: '14px 16px', background: 'var(--indigo-dim)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8 }}>
-                        <p style={{ fontSize: 12.5, color: '#a5b4fc', lineHeight: 1.6 }}>
+                    <div style={{ marginTop: 24, padding: '14px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                        <p style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.6 }}>
                             🔒 Your data is encrypted and never shared with third parties.
                         </p>
                     </div>

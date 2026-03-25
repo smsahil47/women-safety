@@ -26,13 +26,19 @@ const LoginPage: React.FC = () => {
     const submit = async (ev: React.FormEvent) => {
         ev.preventDefault();
         if (!validate()) return;
-        await login(email, password);
-        navigate('/dashboard');
+        try {
+            await login(email, password);
+            navigate('/dashboard');
+        } catch (e) {
+            // Error managed by Context Toasts
+        }
     };
 
     const demo = async () => {
-        await login('priya.sharma@email.com', 'password123');
-        navigate('/dashboard');
+        try {
+            await login('priya.sharma@email.com', 'password123');
+            navigate('/dashboard');
+        } catch (e) {}
     };
 
     return (

@@ -3,39 +3,39 @@
 
 /* ── Tokens ─────────────────────────────────────────────────── */
 :root {
-  --bg: #0F172A;
-  --bg-card: #1E293B;
-  --bg-hover: #263044;
-  --bg-subtle: #172032;
-  --bg-input: #1a2540;
+  --bg: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --bg-hover: #F1F5F9;
+  --bg-subtle: #F1F5F9;
+  --bg-input: #FFFFFF;
 
-  --border: #2D3F55;
-  --border-soft: #233047;
+  --border: #E2E8F0;
+  --border-soft: #F1F5F9;
 
-  --indigo: #6366F1;
-  --indigo-dim: rgba(99, 102, 241, 0.15);
-  --indigo-dark: #4f52cc;
+  --indigo: #0F172A;
+  --indigo-dim: rgba(15, 23, 42, 0.05);
+  --indigo-dark: #1E293B;
 
-  --green: #22C55E;
-  --green-dim: rgba(34, 197, 94, 0.12);
+  --green: #10B981;
+  --green-dim: rgba(16, 185, 129, 0.1);
 
   --amber: #F59E0B;
-  --amber-dim: rgba(245, 158, 11, 0.12);
+  --amber-dim: rgba(245, 158, 11, 0.1);
 
   --red: #EF4444;
   --red-dark: #DC2626;
-  --red-dim: rgba(239, 68, 68, 0.12);
+  --red-dim: rgba(239, 68, 68, 0.1);
 
-  --text: #E2E8F0;
-  --text-2: #94A3B8;
-  --text-3: #4E6280;
+  --text: #0F172A;
+  --text-2: #475569;
+  --text-3: #94A3B8;
 
-  --radius: 8px;
-  --radius-sm: 6px;
-  --radius-lg: 12px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
 
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 /* ── Base ───────────────────────────────────────────────────── */
@@ -259,7 +259,7 @@ body {
 }
 
 .card-hover:hover {
-  border-color: #3d5270;
+  border-color: var(--text-3);
   box-shadow: var(--shadow-md);
 }
 
@@ -304,7 +304,7 @@ body {
 }
 
 .action-card:hover {
-  border-color: #3d5270;
+  border-color: var(--text-3);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
@@ -548,12 +548,12 @@ body {
 
 .badge-indigo {
   background: var(--indigo-dim);
-  color: #a5b4fc;
-  border-color: rgba(99, 102, 241, 0.25);
+  color: var(--text);
+  border-color: rgba(9, 9, 11, 0.25);
 }
 
 .badge-neutral {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.05);
   color: var(--text-2);
   border-color: var(--border);
 }
@@ -616,26 +616,26 @@ body {
 }
 
 .alert-warning {
-  background: rgba(245, 158, 11, 0.06);
-  border-color: rgba(245, 158, 11, 0.25);
+  background: #FFFBEB;
+  border-color: #FEF3C7;
   color: var(--amber);
 }
 
 .alert-info {
-  background: rgba(99, 102, 241, 0.06);
-  border-color: rgba(99, 102, 241, 0.25);
-  color: #a5b4fc;
+  background: #FAFAFA;
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .alert-success {
-  background: var(--green-dim);
-  border-color: rgba(34, 197, 94, 0.25);
+  background: #F0FDF4;
+  border-color: #DCFCE7;
   color: var(--green);
 }
 
 .alert-danger {
-  background: var(--red-dim);
-  border-color: rgba(239, 68, 68, 0.25);
+  background: #FEF2F2;
+  border-color: #FEE2E2;
   color: var(--red);
 }
 
@@ -644,7 +644,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -658,7 +658,7 @@ body {
   padding: 28px;
   max-width: 440px;
   width: 100%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
 /* ── Toast ───────────────────────────────────────────────────── */
@@ -677,23 +677,27 @@ body {
 }
 
 .toast-success {
-  background: #0f2e1e;
-  border-color: rgba(34, 197, 94, 0.3);
+  background: #F0FDF4;
+  border-color: #DCFCE7;
+  color: var(--green);
 }
 
 .toast-error {
-  background: #2b1111;
-  border-color: rgba(239, 68, 68, 0.3);
+  background: #FEF2F2;
+  border-color: #FEE2E2;
+  color: var(--red);
 }
 
 .toast-warning {
-  background: #2b2009;
-  border-color: rgba(245, 158, 11, 0.3);
+  background: #FFFBEB;
+  border-color: #FEF3C7;
+  color: var(--amber);
 }
 
 .toast-info {
-  background: #131a35;
-  border-color: rgba(99, 102, 241, 0.3);
+  background: #FAFAFA;
+  border-color: var(--border);
+  color: var(--text);
 }
 
 /* ── Map box ─────────────────────────────────────────────────── */
@@ -830,6 +834,7 @@ body {
 
 .toggle.on::after {
   transform: translateX(18px);
+  background: #fff;
 }
 
 /* ── Auth layout ─────────────────────────────────────────────── */

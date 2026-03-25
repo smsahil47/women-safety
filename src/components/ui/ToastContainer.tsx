@@ -7,7 +7,7 @@ const ICONS: Record<ToastType, React.ReactNode> = {
     success: <CheckCircle size={15} style={{ color: 'var(--green)', flexShrink: 0 }} />,
     error: <XCircle size={15} style={{ color: 'var(--red)', flexShrink: 0 }} />,
     warning: <AlertTriangle size={15} style={{ color: 'var(--amber)', flexShrink: 0 }} />,
-    info: <Info size={15} style={{ color: '#a5b4fc', flexShrink: 0 }} />,
+    info: <Info size={15} style={{ color: 'var(--text)', flexShrink: 0 }} />,
 };
 const CLS: Record<ToastType, string> = {
     success: 'toast toast-success',

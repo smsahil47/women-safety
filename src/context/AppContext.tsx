@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { User, EmergencyContact, TrackingSession, SOSStatus, Toast, ToastType } from '../types';
-import { MOCK_USER, MOCK_CONTACTS, MOCK_TRACKING_SESSION } from '../services/mockData';
-
+import { MOCK_CONTACTS, MOCK_TRACKING_SESSION } from '../services/mockData';
+import { supabase } from '../services/supabase';
 // ─── App Context Types ────────────────────────────────────────────────────────
 
 interface AppContextType {
@@ -68,27 +68,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // ── Auth ────────────────────────────────────────────────────────────────────
 
-    const login = useCallback(async (email: string, _password: string) => {
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                const u = session.user;
+                setUser({
+                    id: u.id,
+                    email: u.email || '',
+                    name: u.user_metadata?.name || 'User',
+                    phone: u.user_metadata?.phone || '',
+                    avatar: u.user_metadata?.avatar,
+                    createdAt: u.created_at || new Date().toISOString(),
+                    isVerified: true
+                });
+                setIsAuthenticated(true);
+            }
+        };
+        checkSession();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+            if (session?.user) {
+                const u = session.user;
+                setUser({
+                    id: u.id,
+                    email: u.email || '',
+                    name: u.user_metadata?.name || 'User',
+                    phone: u.user_metadata?.phone || '',
+                    avatar: u.user_metadata?.avatar,
+                    createdAt: u.created_at || new Date().toISOString(),
+                    isVerified: true
+                });
+                setIsAuthenticated(true);
+            } else {
+                setUser(null);
+                setIsAuthenticated(false);
+            }
+        });
+        
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const login = useCallback(async (email: string, password: string) => {
         setIsLoading(true);
-        await new Promise(r => setTimeout(r, 1200));
-        setUser({ ...MOCK_USER, email });
-        setIsAuthenticated(true);
-        setIsLoading(false);
-        addToast('Welcome back, Priya! Stay safe 💜', 'success');
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            
+            const firstName = data.user?.user_metadata?.name?.split(' ')[0] || 'there';
+            addToast(`Welcome back, ${firstName}! Stay safe 💜`, 'success');
+        } catch (err: any) {
+            addToast(err.message || 'Failed to login', 'error');
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
     }, [addToast]);
 
     const register = useCallback(async (data: { name: string; email: string; phone: string; password: string }) => {
         setIsLoading(true);
-        await new Promise(r => setTimeout(r, 1500));
-        setUser({ ...MOCK_USER, name: data.name, email: data.email, phone: data.phone });
-        setIsAuthenticated(true);
-        setIsLoading(false);
-        addToast('Account created! Welcome to SafeRoute 💜', 'success');
+        try {
+            const { error } = await supabase.auth.signUp({
+                email: data.email,
+                password: data.password,
+                options: {
+                    data: {
+                        name: data.name,
+                        phone: data.phone,
+                    }
+                }
+            });
+            
+            if (error) throw error;
+            
+            addToast('Account created! Welcome to SafeRoute 💜', 'success');
+        } catch (err: any) {
+            addToast(err.message || 'Failed to register', 'error');
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
     }, [addToast]);
 
-    const logout = useCallback(() => {
-        setUser(null);
-        setIsAuthenticated(false);
+    const logout = useCallback(async () => {
+        await supabase.auth.signOut();
         setSosStatus('idle');
         addToast('Logged out successfully.', 'info');
     }, [addToast]);

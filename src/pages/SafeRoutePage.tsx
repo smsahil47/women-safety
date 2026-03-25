@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Map, MapPin, Navigation, Search, Star, Clock, ChevronRight } from 'lucide-react';
+import { MapPin, Navigation, Search, Star, Clock } from 'lucide-react';
 import MapBox from '../components/ui/MapPlaceholder';
 import SafetyBadge from '../components/ui/SafetyBadge';
 import { MOCK_ROUTES } from '../services/mockData';
