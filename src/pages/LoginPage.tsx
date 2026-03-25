@@ -50,13 +50,6 @@ const LoginPage: React.FC = () => {
         }
     };
 
-    const demo = async () => {
-        try {
-            await login('priya.sharma@email.com', 'password123');
-            navigate('/dashboard');
-        } catch (e) {}
-    };
-
     return (
         <div className="auth-wrap">
             {/* Left – branding */}
@@ -151,17 +144,6 @@ const LoginPage: React.FC = () => {
 
                     {!isForgot ? (
                         <>
-                            <div className="fade-up d2" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
-                                <div className="divider" style={{ flex: 1 }} />
-                                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>or</span>
-                                <div className="divider" style={{ flex: 1 }} />
-                            </div>
-
-                            <button onClick={demo} disabled={isLoading} id="demo-login"
-                                className="btn btn-outline btn-full fade-up d2" style={{ gap: 8 }}>
-                                Try Demo Account
-                            </button>
-
                             <p className="fade-up d3" style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-2)', marginTop: 24 }}>
                                 Don't have an account?{' '}
                                 <Link to="/register" style={{ color: 'var(--indigo)', fontWeight: 500, textDecoration: 'none' }}>Create account</Link>
