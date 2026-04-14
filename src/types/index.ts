@@ -85,6 +85,17 @@ export interface RouteSearchForm {
     destination: string;
 }
 
+export type SafetyPoiType = 'hospital' | 'police' | 'pharmacy';
+
+export interface SafetyPoi {
+    id: string;
+    name: string;
+    type: SafetyPoiType;
+    lat: number;
+    lng: number;
+    distanceKm?: number;
+}
+
 // ─── Tracking Types ───────────────────────────────────────────────────────────
 
 export type TrackingStatus = 'active' | 'inactive' | 'paused';

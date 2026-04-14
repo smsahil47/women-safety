@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Plus, Trash2, Phone, X } from 'lucide-react';
+import { Users, Plus, Trash2, Phone, X, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { ContactFormData, Relationship } from '../types';
 
@@ -9,11 +9,12 @@ const EMPTY: ContactFormData = { name: '', phone: '', relationship: 'Friend' };
 const initials = (n: string) => n.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
 
 const ContactsPage: React.FC = () => {
-    const { contacts, addContact, removeContact } = useApp();
+    const { contacts, contactsLoading, addContact, removeContact, trackingSession, addToast } = useApp();
     const [form, setForm] = useState<ContactFormData>(EMPTY);
     const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
     const [showForm, setShowForm] = useState(false);
     const [removing, setRemoving] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
 
     const validate = () => {
         const e: { name?: string; phone?: string } = {};
@@ -23,14 +24,27 @@ const ContactsPage: React.FC = () => {
         setErrors(e); return !Object.keys(e).length;
     };
 
-    const submit = (e: React.FormEvent) => {
+    const submit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!validate()) return;
-        addContact({ ...form, isNotified: false });
-        setForm(EMPTY); setErrors({}); setShowForm(false);
+        setSaving(true);
+        try {
+            await addContact({ ...form, isNotified: false });
+            setForm(EMPTY); setErrors({}); setShowForm(false);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const remove = (id: string) => {
+        if (contacts.length <= 1) {
+            addToast('You must keep at least one emergency contact.', 'warning');
+            return;
+        }
+        if (trackingSession.status === 'active') {
+            addToast('Cannot modify contacts while Live Tracking is active.', 'warning');
+            return;
+        }
         setRemoving(id);
         setTimeout(() => { removeContact(id); setRemoving(null); }, 250);
     };
@@ -82,8 +96,8 @@ const ContactsPage: React.FC = () => {
                             </select>
                         </div>
                         <div style={{ gridColumn: '1/-1' }}>
-                            <button type="submit" id="contact-submit" className="btn btn-primary" style={{ gap: 7 }}>
-                                <Plus size={14} />Add Contact
+                            <button type="submit" id="contact-submit" className="btn btn-primary" style={{ gap: 7 }} disabled={saving}>
+                                {saving ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Saving…</> : <><Plus size={14} />Add Contact</>}
                             </button>
                         </div>
                     </form>
@@ -94,10 +108,27 @@ const ContactsPage: React.FC = () => {
             <div className="fade-up d1" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{contacts.length} contact{contacts.length !== 1 ? 's' : ''} saved</span>
                 {contacts.length > 0 && <span className="badge badge-safe">Ready for SOS</span>}
+                {contactsLoading && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-3)' }}>
+                        <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />syncing…
+                    </span>
+                )}
             </div>
 
-            {/* Contact list */}
-            {contacts.length === 0 ? (
+            {/* Loading skeleton */}
+            {contactsLoading && contacts.length === 0 ? (
+                <div className="fade-up d2 card" style={{ overflow: 'hidden' }}>
+                    {[1, 2].map(i => (
+                        <div key={i} className="list-row" style={{ gap: 12 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-hover)', flexShrink: 0 }} />
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div style={{ height: 13, width: '40%', borderRadius: 6, background: 'var(--bg-hover)' }} />
+                                <div style={{ height: 11, width: '60%', borderRadius: 6, background: 'var(--bg-hover)' }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            ) : contacts.length === 0 ? (
                 <div className="fade-up d2 card card-pad" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '48px 24px' }}>
                     <div style={{ width: 56, height: 56, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Users size={24} style={{ color: 'var(--text-3)' }} />
@@ -114,7 +145,7 @@ const ContactsPage: React.FC = () => {
                 </div>
             ) : (
                 <div className="fade-up d2 card" style={{ overflow: 'hidden' }}>
-                    {contacts.map((c, i) => (
+                    {contacts.map((c, _i) => (
                         <div key={c.id} className="list-row"
                             style={{ opacity: removing === c.id ? 0 : 1, transition: 'opacity 0.2s' }}>
                             <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--indigo-dim)', border: '1px solid rgba(99,102,241,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'var(--indigo)', flexShrink: 0 }}>
@@ -131,10 +162,11 @@ const ContactsPage: React.FC = () => {
                                 {c.isNotified ? 'SOS Active' : 'Standby'}
                             </span>
                             <button id={`delete-contact-${c.id}`} onClick={() => remove(c.id)}
+                                disabled={contacts.length <= 1 || trackingSession.status === 'active'}
                                 className="no-btn" title="Remove"
-                                style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', borderRadius: 6, transition: 'all 0.15s', flexShrink: 0 }}
-                                onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.background = 'var(--red-dim)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.background = 'none'; }}>
+                                style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: (contacts.length <= 1 || trackingSession.status === 'active') ? 'var(--text-4)' : 'var(--text-3)', borderRadius: 6, transition: 'all 0.15s', flexShrink: 0, cursor: (contacts.length <= 1 || trackingSession.status === 'active') ? 'not-allowed' : 'pointer' }}
+                                onMouseEnter={e => { if (contacts.length > 1 && trackingSession.status !== 'active') { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.background = 'var(--red-dim)'; } }}
+                                onMouseLeave={e => { if (contacts.length > 1 && trackingSession.status !== 'active') { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.background = 'none'; } }}>
                                 <Trash2 size={14} />
                             </button>
                         </div>

@@ -1,18 +1,47 @@
-import React from 'react';
-import { Navigation, Play, Square, Users, Battery, Clock, Wifi } from 'lucide-react';
-import MapBox from '../components/ui/MapPlaceholder';
+import React, { useState, useEffect } from 'react';
+import { Navigation, Play, Square, Users, Battery, Clock, Wifi, X } from 'lucide-react';
+import LeafletMap from '../components/ui/LeafletMap';
 import { useApp } from '../context/AppContext';
 
 const TrackingPage: React.FC = () => {
     const { trackingSession, startTracking, stopTracking, contacts } = useApp();
     const active = trackingSession.status === 'active';
+    const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
+    const [modal, setModal] = useState(false);
+    const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
 
-    const elapsed = (() => {
-        if (!active) return '00:00';
-        const ms = Date.now() - new Date(trackingSession.startTime).getTime();
-        const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
-        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    })();
+    useEffect(() => {
+        setSelectedContacts(new Set(contacts.map(c => c.id)));
+    }, [contacts]);
+
+    useEffect(() => {
+        let watchId: number;
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition((p) => setCurrentLocation([p.coords.latitude, p.coords.longitude]));
+            watchId = navigator.geolocation.watchPosition(
+                (position) => setCurrentLocation([position.coords.latitude, position.coords.longitude]),
+                (error) => console.error("Error watching GPS", error),
+                { enableHighAccuracy: true, maximumAge: 0 }
+            );
+        }
+        return () => {
+            if (watchId) navigator.geolocation.clearWatch(watchId);
+        };
+    }, []);
+
+    const [elapsed, setElapsed] = useState('00:00');
+
+    useEffect(() => {
+        if (!active) { setElapsed('00:00'); return; }
+        const tick = () => {
+            const ms = Date.now() - new Date(trackingSession.startTime).getTime();
+            const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
+            setElapsed(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+        };
+        tick();
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, [active, trackingSession.startTime]);
 
     const initials = (n: string) => n.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
 
@@ -38,12 +67,25 @@ const TrackingPage: React.FC = () => {
                             {active ? 'Tracking Active' : 'Not Tracking'}
                         </span>
                     </div>
-                    <p style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
-                        {active ? 'Location is being shared with contacts' : 'Start tracking to share your location'}
-                    </p>
-                    <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                        {active ? 'Your emergency contacts have been notified.' : 'Contacts will be notified when tracking begins.'}
-                    </p>
+                    {contacts.length === 0 ? (
+                        <>
+                            <p style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+                                Cannot Start Tracking
+                            </p>
+                            <p style={{ fontSize: 13, color: 'var(--red)', fontWeight: 500 }}>
+                                Please add emergency contacts before using the Live Tracking feature.
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <p style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+                                {active ? 'Location is being shared with contacts' : 'Start tracking to share your location'}
+                            </p>
+                            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                                {active ? 'Your emergency contacts have been notified.' : 'Contacts will be notified when tracking begins.'}
+                            </p>
+                        </>
+                    )}
                 </div>
 
                 {active && (
@@ -63,7 +105,7 @@ const TrackingPage: React.FC = () => {
 
                 <div style={{ flexShrink: 0 }}>
                     {!active
-                        ? <button id="start-tracking-btn" onClick={startTracking} className="btn btn-primary" style={{ gap: 7 }}>
+                        ? <button id="start-tracking-btn" disabled={contacts.length === 0} onClick={() => setModal(true)} className="btn btn-primary" style={{ gap: 7 }}>
                             <Play size={14} fill="currentColor" />Start Tracking
                         </button>
                         : <button id="stop-tracking-btn" onClick={stopTracking} className="btn btn-outline" style={{ gap: 7, borderColor: 'rgba(239,68,68,0.3)', color: 'var(--red)' }}>
@@ -74,14 +116,23 @@ const TrackingPage: React.FC = () => {
             </div>
 
             {/* Map */}
-            <div className="fade-up d2">
-                <MapBox height={340} label={active ? 'Live Location' : 'Map Preview'} />
+            <div className="fade-up d2" style={{ height: 350, position: 'relative' }}>
+                <LeafletMap 
+                    height={350} 
+                    center={currentLocation || [20.5937, 78.9629]} 
+                    zoom={currentLocation ? 16 : 5} 
+                    liveLocation={currentLocation}
+                    zones={[]} 
+                />
             </div>
 
             {/* Contacts */}
             <div className="fade-up d3">
                 <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Users size={13} />Sharing with ({contacts.length})
+                    <Users size={13} />
+                    {active
+                        ? `Sharing with (${trackingSession.sharedWith?.length || contacts.length})`
+                        : `Emergency Contacts (${contacts.length})`}
                 </div>
 
                 {contacts.length === 0 ? (
@@ -91,23 +142,81 @@ const TrackingPage: React.FC = () => {
                     </div>
                 ) : (
                     <div className="card" style={{ overflow: 'hidden' }}>
-                        {contacts.map((c, i) => (
-                            <div key={c.id} className="list-row">
-                                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--indigo-dim)', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--indigo)', flexShrink: 0 }}>
-                                    {initials(c.name)}
+                        {contacts.map((c) => {
+                            const isSharing = !active || !trackingSession.sharedWith?.length || trackingSession.sharedWith.includes(c.id);
+                            return (
+                                <div key={c.id} className="list-row" style={{ opacity: active && !isSharing ? 0.4 : 1 }}>
+                                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--indigo-dim)', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--indigo)', flexShrink: 0 }}>
+                                        {initials(c.name)}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div className="trunc" style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text)' }}>{c.name}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{c.relationship} · {c.phone}</div>
+                                    </div>
+                                    <span className={`badge ${isSharing && active ? 'badge-safe' : 'badge-neutral'}`} style={{ fontSize: 11 }}>
+                                        {isSharing && active ? 'Notified' : active ? 'Not included' : 'Standby'}
+                                    </span>
                                 </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div className="trunc" style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text)' }}>{c.name}</div>
-                                    <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{c.relationship} · {c.phone}</div>
-                                </div>
-                                <span className={`badge ${active ? 'badge-safe' : 'badge-neutral'}`} style={{ fontSize: 11 }}>
-                                    {active ? 'Notified' : 'Standby'}
-                                </span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
+
+            {/* Confirmation Modal */}
+            {modal && (
+                <div className="modal-mask">
+                    <div className="modal-box fade-up">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--indigo-dim)', border: '1px solid rgba(99,102,241,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <Navigation size={17} style={{ color: 'var(--indigo)' }} />
+                            </div>
+                            <div>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Start Live Tracking</div>
+                                <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginTop: 2 }}>Continuously share your live GPS position</div>
+                            </div>
+                        </div>
+
+                        <div className="divider" style={{ marginBottom: 16 }} />
+
+                        <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 14 }}>
+                            Select the emergency contacts you want to share your location with:
+                        </p>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, maxHeight: 150, overflowY: 'auto' }}>
+                            {contacts.map(c => (
+                                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 0' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedContacts.has(c.id)}
+                                        onChange={(e) => {
+                                            const newSet = new Set(selectedContacts);
+                                            if (e.target.checked) newSet.add(c.id);
+                                            else newSet.delete(c.id);
+                                            setSelectedContacts(newSet);
+                                        }}
+                                        style={{ width: 16, height: 16, accentColor: 'var(--indigo)' }}
+                                    />
+                                    <span style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500 }}>{c.name}</span>
+                                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>({c.relationship})</span>
+                                </label>
+                            ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button id="tracking-cancel-modal" onClick={() => setModal(false)}
+                                className="btn btn-outline" style={{ flex: 1, gap: 6 }}>
+                                <X size={14} />Cancel
+                            </button>
+                            <button id="tracking-confirm" onClick={() => { setModal(false); startTracking(Array.from(selectedContacts)); }}
+                                disabled={selectedContacts.size === 0}
+                                className="btn btn-primary" style={{ flex: 1, gap: 6 }}>
+                                <Play size={14} fill="currentColor" />Start
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -12,7 +12,7 @@ const UpdatePasswordPage: React.FC = () => {
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!password || password.length < 6) {
             addToast('Password must be at least 6 characters', 'error');
             return;

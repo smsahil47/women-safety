@@ -1,14 +1,10 @@
-import React, { useState } from 'react';
-import { Shield, Info, MapPin, TrendingUp, TrendingDown } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Shield, Info, MapPin, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import SafetyBadge from '../components/ui/SafetyBadge';
-import { MOCK_HEAT_ZONES, MOCK_CRIME_ZONES } from '../services/mockData';
 import type { SafetyLevel } from '../types';
-
-const HEAT_FG: Record<SafetyLevel, string> = {
-    safe: 'rgba(34,197,94,',
-    moderate: 'rgba(245,158,11,',
-    danger: 'rgba(239,68,68,',
-};
+import LeafletMap from '../components/ui/LeafletMap';
+import { getIndiaSafetyDataset } from '../services/indiaSafetyData';
+import { fetchRiskZones, type RealRiskZone } from '../services/api';
 
 const FILTERS: { value: SafetyLevel | 'all'; label: string }[] = [
     { value: 'all', label: 'All Zones' },
@@ -17,11 +13,44 @@ const FILTERS: { value: SafetyLevel | 'all'; label: string }[] = [
     { value: 'danger', label: 'High Risk' },
 ];
 
+const SkeletonRow = () => (
+    <div className="list-row" style={{ gap: 12 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ height: 14, width: '60%', borderRadius: 6, background: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite' }} />
+            <div style={{ height: 11, width: '85%', borderRadius: 6, background: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite' }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+            <div style={{ height: 11, width: 60, borderRadius: 6, background: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite' }} />
+            <div style={{ height: 10, width: 80, borderRadius: 6, background: 'var(--bg-hover)', animation: 'pulse 1.4s ease-in-out infinite' }} />
+        </div>
+    </div>
+);
+
 const HeatmapPage: React.FC = () => {
     const [heatOn, setHeatOn] = useState(false);
     const [filter, setFilter] = useState<SafetyLevel | 'all'>('all');
+    const [zones, setZones] = useState<RealRiskZone[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    const zones = MOCK_CRIME_ZONES.filter(z => filter === 'all' || z.safetyLevel === filter);
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+        fetchRiskZones()
+            .then(data => { if (!cancelled) setZones(data); })
+            .catch(err => { if (!cancelled) setError(err.message || 'Failed to load risk zones.'); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, []);
+
+    const filteredZones = zones.filter(z => filter === 'all' || z.safetyLevel === filter);
+
+    // The real detailed map dataset for Leaflet
+    const allIndiaZones = useMemo(() => getIndiaSafetyDataset(), []);
+    const filteredIndiaZones = useMemo(() =>
+        allIndiaZones.filter(z => filter === 'all' || z.level === filter),
+    [allIndiaZones, filter]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -29,7 +58,7 @@ const HeatmapPage: React.FC = () => {
             {/* Header */}
             <div className="fade-up" style={{ paddingBottom: 20, borderBottom: '1px solid var(--border-soft)' }}>
                 <h1 className="page-title">Safety Heatmap</h1>
-                <p className="page-subtitle">Visualise crime hotspots and safe zones in your area</p>
+                <p className="page-subtitle">Visualise crime hotspots and safe zones based on community-reported incidents</p>
             </div>
 
             {/* Controls */}
@@ -62,44 +91,21 @@ const HeatmapPage: React.FC = () => {
             </div>
 
             {/* Map */}
-            <div className="fade-up d2 map-box" style={{ height: 380 }}>
-                <div className="map-grid" />
+            <div className="fade-up d2" style={{ height: 450, position: 'relative' }}>
+                <LeafletMap
+                    height={450}
+                    center={[20.5937, 78.9629]}
+                    zoom={5}
+                    zones={heatOn ? filteredIndiaZones : []}
+                />
 
-                <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.15 }} viewBox="0 0 800 380" preserveAspectRatio="none">
-                    <line x1="0" y1="190" x2="800" y2="190" stroke="#6366f1" strokeWidth="1.5" strokeDasharray="10 6" />
-                    <line x1="400" y1="0" x2="400" y2="380" stroke="#6366f1" strokeWidth="1.5" strokeDasharray="10 6" />
-                    <line x1="0" y1="90" x2="800" y2="300" stroke="#6366f1" strokeWidth="1" strokeDasharray="6 8" opacity="0.7" />
-                    <line x1="0" y1="310" x2="800" y2="100" stroke="#6366f1" strokeWidth="1" strokeDasharray="6 8" opacity="0.7" />
-                </svg>
-
-                {/* Heatmap zones */}
-                {heatOn && MOCK_HEAT_ZONES.map(z => (
-                    <div key={z.id} style={{
-                        position: 'absolute',
-                        left: `${z.x}%`, top: `${z.y}%`,
-                        width: z.radius * 2, height: z.radius * 2,
-                        transform: 'translate(-50%,-50%)', borderRadius: '50%',
-                        background: `radial-gradient(circle, ${HEAT_FG[z.safetyLevel]}${z.intensity}) 0%, ${HEAT_FG[z.safetyLevel]}0) 70%)`,
-                        pointerEvents: 'none', transition: 'opacity 0.4s',
-                    }} />
-                ))}
-
-                {/* Zone labels on heat */}
-                {heatOn && MOCK_HEAT_ZONES.map(z => (
-                    <div key={`lbl-${z.id}`} style={{ position: 'absolute', left: `${z.x}%`, top: `${z.y}%`, transform: 'translate(-50%, -50%)', zIndex: 10, pointerEvents: 'none' }}>
-                        <div style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', background: 'rgba(15,23,42,0.85)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
-                            {z.area}
-                        </div>
-                    </div>
-                ))}
-
-                {/* Empty hint */}
+                {/* Empty hint over map */}
                 {!heatOn && (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ position: 'absolute', inset: 0, zIndex: 1000, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(2px)' }}>
                         <div style={{ width: 44, height: 44, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Shield size={20} style={{ color: 'var(--text-3)' }} />
                         </div>
-                        <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Enable the heat layer to view safety zones</p>
+                        <p style={{ fontSize: 13, color: 'var(--text-3)', fontWeight: 500 }}>Enable the heat layer to view safety zones</p>
                     </div>
                 )}
             </div>
@@ -123,31 +129,73 @@ const HeatmapPage: React.FC = () => {
                             <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{l.label}</span>
                         </div>
                     ))}
+
+                    <div style={{ marginTop: 16, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-hover)', fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.6 }}>
+                        <strong style={{ color: 'var(--text-2)', display: 'block', marginBottom: 4 }}>Data source</strong>
+                        Risk zones are derived from real community-reported incidents submitted by users in the app.
+                    </div>
                 </div>
 
                 {/* Zone list */}
                 <div>
                     <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <MapPin size={13} />Risk Zones ({zones.length})
+                        <MapPin size={13} />
+                        {loading ? 'Risk Zones' : `Risk Zones (${filteredZones.length})`}
                     </div>
                     <div className="card" style={{ overflow: 'hidden' }}>
-                        {zones.length === 0 ? (
-                            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                                No zones match current filter
+                        {/* Loading state */}
+                        {loading && (
+                            <div>
+                                {[1, 2, 3].map(i => <SkeletonRow key={i} />)}
                             </div>
-                        ) : zones.map(z => (
+                        )}
+
+                        {/* Error state */}
+                        {!loading && error && (
+                            <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--red)', fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                                <AlertTriangle size={20} />
+                                <div>{error}</div>
+                                <button className="btn btn-sm btn-outline" onClick={() => {
+                                    setLoading(true); setError(null);
+                                    fetchRiskZones().then(setZones).catch(e => setError(e.message)).finally(() => setLoading(false));
+                                }}>Retry</button>
+                            </div>
+                        )}
+
+                        {/* Empty state */}
+                        {!loading && !error && filteredZones.length === 0 && (
+                            <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                                <Shield size={28} style={{ opacity: 0.3 }} />
+                                <div style={{ fontWeight: 500 }}>
+                                    {zones.length === 0
+                                        ? 'No community reports yet'
+                                        : 'No zones match the current filter'}
+                                </div>
+                                <div style={{ fontSize: 12, maxWidth: 280 }}>
+                                    {zones.length === 0
+                                        ? 'Risk zones appear here once users submit incident reports from the community page.'
+                                        : 'Try selecting "All Zones" to see all reported areas.'}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Real data */}
+                        {!loading && !error && filteredZones.map(z => (
                             <div key={z.id} className="list-row">
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
                                         <span className="trunc" style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text)' }}>{z.name}</span>
                                         <SafetyBadge level={z.safetyLevel} size="sm" />
+                                        <span style={{ fontSize: 10.5, color: 'var(--text-3)', background: 'var(--bg-hover)', border: '1px solid var(--border-soft)', borderRadius: 99, padding: '1px 7px' }}>
+                                            {z.incidentType}
+                                        </span>
                                     </div>
                                     <div className="trunc" style={{ fontSize: 12, color: 'var(--text-3)' }}>{z.description}</div>
                                 </div>
                                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', fontSize: 12, color: z.safetyLevel === 'safe' ? 'var(--green)' : 'var(--red)', marginBottom: 2 }}>
                                         {z.safetyLevel === 'safe' ? <TrendingDown size={12} /> : <TrendingUp size={12} />}
-                                        <span>{z.crimeCount} incidents</span>
+                                        <span>{z.crimeCount} {z.crimeCount === 1 ? 'incident' : 'incidents'}</span>
                                     </div>
                                     <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Updated {z.lastUpdated}</div>
                                 </div>

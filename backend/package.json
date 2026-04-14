@@ -1,7 +1,7 @@
 {
   "name": "women-safety-api",
   "version": "1.0.0",
-  "description": "Backend API for SafeRoute",
+  "description": "Backend API for SafeRoute — Women Safety App",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -9,11 +9,10 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
+    "@supabase/supabase-js": "^2.100.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "express": "^4.19.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Map, Navigation, AlertTriangle, FileText, Shield, Clock, TrendingUp, ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MOCK_ACTIVITIES, SAFETY_TIPS } from '../services/mockData';
+import { SAFETY_TIPS } from '../services/mockData';
+import { fetchUserStats } from '../services/api';
 import type { ActivityType } from '../types';
 
 const ACTIVITY_ICONS: Record<ActivityType, React.ReactNode> = {
@@ -19,10 +20,29 @@ const timeAgo = (iso: string) => {
     return `${Math.floor(h / 24)}d ago`;
 };
 
+interface Stats {
+    reportsCount: number;
+    trackingCount: number;
+}
+
 const DashboardPage: React.FC = () => {
-    const { user } = useApp();
+    const { user, contacts } = useApp();
     const navigate = useNavigate();
-    const name = user?.name?.split(' ')[0] ?? 'Priya';
+    const name = user?.name?.split(' ')[0] ?? 'there';
+    const [stats, setStats] = useState<Stats>({ reportsCount: 0, trackingCount: 0 });
+    const [statsLoading, setStatsLoading] = useState(true);
+
+    // Greeting based on time of day
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+    useEffect(() => {
+        if (!user?.id) { setStatsLoading(false); return; }
+        fetchUserStats(user.id)
+            .then(s => setStats(s))
+            .catch(() => {})
+            .finally(() => setStatsLoading(false));
+    }, [user?.id]);
 
     const ACTIONS = [
         { id: 'ac-route', to: '/safe-route', icon: <Map size={18} />, title: 'Safe Route', desc: 'Find the safest path to your destination', color: 'var(--indigo)' },
@@ -32,11 +52,43 @@ const DashboardPage: React.FC = () => {
     ];
 
     const METRICS = [
-        { label: 'Routes Used', value: '12', sub: 'This month' },
-        { label: 'Tracking Sessions', value: '8', sub: 'This month' },
-        { label: 'Reports Submitted', value: '3', sub: 'All time' },
+        { label: 'Emergency Contacts', value: statsLoading ? '—' : contacts.length.toString(), sub: 'Saved' },
+        { label: 'Tracking Sessions', value: statsLoading ? '—' : stats.trackingCount.toString(), sub: 'All time' },
+        { label: 'Reports Submitted', value: statsLoading ? '—' : stats.reportsCount.toString(), sub: 'All time' },
         { label: 'Safety Score', value: '94', sub: 'Out of 100' },
     ];
+
+    // Generate recent activities from stats
+    const recentActivities = [
+        contacts.length > 0 && {
+            id: 'act-contacts',
+            type: 'contact' as ActivityType,
+            title: 'Emergency Contacts Ready',
+            description: `${contacts.length} contact${contacts.length !== 1 ? 's' : ''} saved`,
+            timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+        },
+        stats.reportsCount > 0 && {
+            id: 'act-reports',
+            type: 'report' as ActivityType,
+            title: 'Community Reports Submitted',
+            description: `${stats.reportsCount} report${stats.reportsCount !== 1 ? 's' : ''} submitted`,
+            timestamp: new Date(Date.now() - 3600000 * 24).toISOString(),
+        },
+        stats.trackingCount > 0 && {
+            id: 'act-tracking',
+            type: 'tracking' as ActivityType,
+            title: 'Tracking Sessions Completed',
+            description: `${stats.trackingCount} session${stats.trackingCount !== 1 ? 's' : ''} recorded`,
+            timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
+        },
+        {
+            id: 'act-welcome',
+            type: 'route' as ActivityType,
+            title: 'Welcome to SafeRoute',
+            description: 'Your safety companion is active',
+            timestamp: user?.createdAt || new Date().toISOString(),
+        },
+    ].filter(Boolean) as { id: string; type: ActivityType; title: string; description: string; timestamp: string }[];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -44,7 +96,7 @@ const DashboardPage: React.FC = () => {
             {/* Page header */}
             <div className="fade-up" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, paddingBottom: 20, borderBottom: '1px solid var(--border-soft)' }}>
                 <div>
-                    <h1 className="page-title">Good morning, {name}</h1>
+                    <h1 className="page-title">{greeting}, {name} 👋</h1>
                     <p className="page-subtitle" style={{ marginTop: 4 }}>Here's an overview of your safety activity</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'var(--green-dim)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 6 }}>
@@ -95,18 +147,24 @@ const DashboardPage: React.FC = () => {
                             <Clock size={14} style={{ color: 'var(--text-3)' }} />Recent Activity
                         </span>
                     </div>
-                    {MOCK_ACTIVITIES.slice(0, 5).map((a) => (
-                        <div key={a.id} className="list-row">
-                            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', flexShrink: 0 }}>
-                                {ACTIVITY_ICONS[a.type]}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div className="trunc" style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{a.title}</div>
-                                <div className="trunc" style={{ fontSize: 12, color: 'var(--text-3)' }}>{a.description}</div>
-                            </div>
-                            <div style={{ fontSize: 11.5, color: 'var(--text-3)', flexShrink: 0 }}>{timeAgo(a.timestamp)}</div>
+                    {recentActivities.length === 0 ? (
+                        <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12.5 }}>
+                            No activity yet. Start using SafeRoute!
                         </div>
-                    ))}
+                    ) : (
+                        recentActivities.slice(0, 5).map((a) => (
+                            <div key={a.id} className="list-row">
+                                <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', flexShrink: 0 }}>
+                                    {ACTIVITY_ICONS[a.type]}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="trunc" style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{a.title}</div>
+                                    <div className="trunc" style={{ fontSize: 12, color: 'var(--text-3)' }}>{a.description}</div>
+                                </div>
+                                <div style={{ fontSize: 11.5, color: 'var(--text-3)', flexShrink: 0 }}>{timeAgo(a.timestamp)}</div>
+                            </div>
+                        ))
+                    )}
                 </div>
 
                 {/* Safety tips */}

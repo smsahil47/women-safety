@@ -7,10 +7,16 @@ const Spinner = () => (
 );
 
 const SOSPage: React.FC = () => {
-    const { sosStatus, triggerSOS, cancelSOS, resetSOS, contacts } = useApp();
+    const { sosStatus, sosCountdown, triggerSOS, cancelSOS, resetSOS, contacts } = useApp();
     const [modal, setModal] = useState(false);
+    const [selectedContacts, setSelectedContacts] = React.useState<Set<string>>(new Set());
+
+    React.useEffect(() => {
+        setSelectedContacts(new Set(contacts.map(c => c.id)));
+    }, [contacts]);
 
     const idle = sosStatus === 'idle';
+    const confirming = sosStatus === 'confirming';
     const sending = sosStatus === 'sending';
     const sent = sosStatus === 'sent';
 
@@ -53,23 +59,57 @@ const SOSPage: React.FC = () => {
                         </button>
                     </div>
                 ) : (
-                    /* Idle / sending state */
+                    /* Idle / confirming / sending state */
                     <>
                         <div style={{ textAlign: 'center', maxWidth: 360 }}>
-                            <p style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.7 }}>
-                                Press the button below to send an emergency alert to{' '}
-                                <strong style={{ color: 'var(--text)' }}>{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</strong>.
-                                Your location will be shared automatically.
-                            </p>
+                            {contacts.length === 0 ? (
+                                <p style={{ fontSize: 13.5, color: 'var(--red, #ef4444)', lineHeight: 1.7, fontWeight: 500 }}>
+                                    Please add emergency contacts before using the SOS feature.
+                                </p>
+                            ) : confirming ? (
+                                <p style={{ fontSize: 13.5, color: 'var(--red)', lineHeight: 1.7, fontWeight: 700, animation: 'pulse 1s ease-in-out infinite' }}>
+                                    🚨 Sending alert in {sosCountdown}s… tap below to cancel!
+                                </p>
+                            ) : (
+                                <p style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.7 }}>
+                                    Press the button below to send an emergency alert to{' '}
+                                    <strong style={{ color: 'var(--text)' }}>{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</strong>.
+                                    Your location will be shared automatically.
+                                </p>
+                            )}
                         </div>
 
-                        <button id="sos-button" onClick={() => idle && setModal(true)} disabled={sending}
+                        <button id="sos-button" onClick={() => idle && setModal(true)} disabled={sending || contacts.length === 0}
                             className="sos-btn">
                             {sending
                                 ? <><Spinner /><span style={{ fontSize: 13, fontWeight: 500, marginTop: 6 }}>Sending…</span></>
                                 : <><AlertTriangle size={36} /><span>SOS</span></>
                             }
                         </button>
+
+                        {/* Big cancel button during countdown */}
+                        {confirming && (
+                            <button id="sos-cancel-countdown"
+                                onClick={cancelSOS}
+                                style={{
+                                    padding: '14px 40px',
+                                    borderRadius: 12,
+                                    background: 'var(--red)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    fontWeight: 700,
+                                    fontSize: 16,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    boxShadow: '0 0 0 4px rgba(239,68,68,0.3)',
+                                    animation: 'pulse 1s ease-in-out infinite',
+                                }}
+                            >
+                                <X size={20} /> Cancel SOS ({sosCountdown})
+                            </button>
+                        )}
 
                         {idle && (
                             <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
@@ -121,11 +161,25 @@ const SOSPage: React.FC = () => {
                         <div className="divider" style={{ marginBottom: 16 }} />
 
                         <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 14 }}>
-                            An SOS alert will be sent to <strong style={{ color: 'var(--text)' }}>{contacts.length} emergency contact{contacts.length !== 1 ? 's' : ''}</strong> with your current GPS location.
+                            Select the emergency contacts to notify with your current GPS location.
                         </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20, maxHeight: 150, overflowY: 'auto' }}>
                             {contacts.map(c => (
-                                <span key={c.id} className="badge badge-neutral">{c.name}</span>
+                                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 0' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedContacts.has(c.id)}
+                                        onChange={(e) => {
+                                            const newSet = new Set(selectedContacts);
+                                            if (e.target.checked) newSet.add(c.id);
+                                            else newSet.delete(c.id);
+                                            setSelectedContacts(newSet);
+                                        }}
+                                        style={{ width: 16, height: 16, accentColor: 'var(--red)' }}
+                                    />
+                                    <span style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500 }}>{c.name}</span>
+                                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>({c.relationship})</span>
+                                </label>
                             ))}
                         </div>
 
@@ -134,7 +188,8 @@ const SOSPage: React.FC = () => {
                                 className="btn btn-outline" style={{ flex: 1, gap: 6 }}>
                                 <X size={14} />Cancel
                             </button>
-                            <button id="sos-confirm" onClick={() => { setModal(false); triggerSOS(); }}
+                            <button id="sos-confirm" onClick={() => { setModal(false); triggerSOS(Array.from(selectedContacts)); }}
+                                disabled={selectedContacts.size === 0}
                                 className="btn btn-danger" style={{ flex: 1, gap: 6 }}>
                                 <AlertTriangle size={14} />Send Alert
                             </button>
