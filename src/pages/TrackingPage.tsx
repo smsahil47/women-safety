@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigation, Play, Square, Users, Battery, Clock, Wifi, X } from 'lucide-react';
 import LeafletMap from '../components/ui/LeafletMap';
 import { useApp } from '../context/AppContext';
+import { supabase } from '../services/supabase';
 
 const TrackingPage: React.FC = () => {
-    const { trackingSession, startTracking, stopTracking, contacts } = useApp();
+    const { trackingSession, startTracking, stopTracking, contacts, activeTrackingId } = useApp();
     const active = trackingSession.status === 'active';
     const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
     const [modal, setModal] = useState(false);
     const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
+    const locationPushRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
         setSelectedContacts(new Set(contacts.map(c => c.id)));
@@ -28,6 +30,25 @@ const TrackingPage: React.FC = () => {
             if (watchId) navigator.geolocation.clearWatch(watchId);
         };
     }, []);
+
+    // Push live location to Supabase every 5s while tracking is active
+    useEffect(() => {
+        if (active && activeTrackingId && currentLocation) {
+            const push = async () => {
+                await supabase
+                    .from('tracking_sessions')
+                    .update({ current_lat: currentLocation[0], current_lng: currentLocation[1] })
+                    .eq('id', activeTrackingId);
+            };
+            push(); // immediate push
+            locationPushRef.current = setInterval(push, 5000);
+        } else {
+            if (locationPushRef.current) clearInterval(locationPushRef.current);
+        }
+        return () => {
+            if (locationPushRef.current) clearInterval(locationPushRef.current);
+        };
+    }, [active, activeTrackingId, currentLocation]);
 
     const [elapsed, setElapsed] = useState('00:00');
 

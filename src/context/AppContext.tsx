@@ -49,6 +49,9 @@ interface AppContextType {
 
     // Loading
     isLoading: boolean;
+
+    // Active tracking session ID (for location push)
+    activeTrackingId: string | null;
 }
 
 // ─── Context Creation ─────────────────────────────────────────────────────────
@@ -321,23 +324,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // ── Tracking ────────────────────────────────────────────────────────────────
 
-    const startTracking = useCallback(async (contactIds?: string[]) => {
+    const startTracking = useCallback(async (_contactIds?: string[]) => {
+        if (!user?.id) { addToast('Please log in first', 'error'); return; }
+
+        // Get current GPS location
+        let location: { lat?: number; lng?: number } = {};
+        try {
+            const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+            );
+            location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        } catch {
+            console.warn('Could not get GPS location for tracking start');
+        }
+
+        try {
+            // Call backend — saves session to DB AND sends SMS to all contacts
+            const response = await fetch('http://localhost:5000/api/tracking/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, location }),
+            });
+            if (!response.ok) throw new Error('Backend unreachable');
+            const data = await response.json();
+            setActiveTrackingId(data.sessionId);
+            addToast(`📍 Live tracking started. ${data.notifiedCount} contact(s) notified via SMS.`, 'success');
+        } catch (err) {
+            console.warn('Backend tracking/start failed, saving locally:', err);
+            // Fallback: save directly to Supabase without SMS
+            try {
+                const session = await startTrackingSession(user.id);
+                setActiveTrackingId(session.id);
+            } catch {}
+            addToast('Live tracking started (SMS notification unavailable).', 'warning');
+        }
+
         setTrackingSession(prev => ({
             ...prev,
             status: 'active',
             startTime: new Date().toISOString(),
-            sharedWith: contactIds || [],
+            sharedWith: [],
         }));
-        addToast('Live tracking started. Contacts notified.', 'success');
-
-        if (user?.id) {
-            try {
-                const session = await startTrackingSession(user.id);
-                setActiveTrackingId(session.id);
-            } catch (err) {
-                console.warn('Failed to save tracking session to DB:', err);
-            }
-        }
     }, [user?.id, addToast]);
 
     const stopTracking = useCallback(async () => {
@@ -447,6 +474,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sosStatus, sosCountdown, triggerSOS, cancelSOS, resetSOS,
         toasts, addToast, removeToast,
         isLoading,
+        activeTrackingId,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

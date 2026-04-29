@@ -7,6 +7,11 @@ type RegErrors = { email?: string; name?: string; phone?: string; password?: str
 type RegForm = { email: string; name: string; phone: string; password: string; confirm: string; };
 const EMPTY: RegForm = { email: '', name: '', phone: '', password: '', confirm: '' };
 
+// Strip +91 prefix so the raw 10-digit value lives in state
+const stripPrefix = (v: string) => v.replace(/^\+91/, '').replace(/\D/g, '').slice(0, 10);
+// Always store with +91 prefix for Twilio
+const withPrefix = (v: string) => `+91${v.replace(/\D/g, '').slice(0, 10)}`;
+
 const Spinner = () => (
     <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite' }} />
 );
@@ -42,7 +47,9 @@ const RegisterPage: React.FC = () => {
         }
         if (s === 2) {
             if (!form.name.trim()) e.name = 'Full name required';
-            if (!form.phone.trim()) e.phone = 'Phone number required';
+            const digits = form.phone.replace(/\D/g, '');
+            if (!digits) e.phone = 'Phone number required';
+            else if (digits.length !== 10) e.phone = 'Enter a valid 10-digit Indian mobile number';
         }
         if (s === 3) {
             if (!form.password) e.password = 'Password required';
@@ -60,7 +67,7 @@ const RegisterPage: React.FC = () => {
         e.preventDefault();
         if (!validate(3)) return;
         try {
-            await register({ email: form.email, password: form.password, name: form.name, phone: form.phone });
+            await register({ email: form.email, password: form.password, name: form.name, phone: withPrefix(form.phone) });
             navigate('/dashboard');
         } catch (err) {
             // Expected error structure already handled in Context Toast
@@ -140,10 +147,25 @@ const RegisterPage: React.FC = () => {
                                 </div>
                                 <div className="field">
                                     <label className="label-text">Phone number</label>
-                                    <div className="input-wrap">
-                                        <Phone size={14} className="ic" />
-                                        <input id="reg-phone" type="tel" value={form.phone} onChange={set('phone')}
-                                            placeholder="+91 98765 43210" className={inputCls('phone')} />
+                                    <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+                                        <span style={{
+                                            display: 'flex', alignItems: 'center', padding: '0 10px',
+                                            background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+                                            borderRight: 'none', borderRadius: '6px 0 0 6px',
+                                            fontSize: 13, fontWeight: 600, color: 'var(--text-2)',
+                                            whiteSpace: 'nowrap', userSelect: 'none'
+                                        }}>+91</span>
+                                        <input
+                                            id="reg-phone"
+                                            type="tel"
+                                            inputMode="numeric"
+                                            maxLength={10}
+                                            value={form.phone}
+                                            onChange={e => setForm(f => ({ ...f, phone: stripPrefix(e.target.value) }))}
+                                            placeholder="9876543210"
+                                            className={`input${errors.phone ? ' err' : ''}`}
+                                            style={{ borderRadius: '0 6px 6px 0', flex: 1 }}
+                                        />
                                     </div>
                                     {errors.phone && <span className="err-msg">{errors.phone}</span>}
                                 </div>

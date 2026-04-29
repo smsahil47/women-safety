@@ -259,11 +259,11 @@ const SafeRoutePage: React.FC = () => {
                     const d = form.destination.toLowerCase();
                     const routeStr = `${o} to ${d}`;
                     // Match if report location string contains origin, destination, or exact requested route string
-                    return (o && loc.includes(o.split(',')[0])) || 
-                           (d && loc.includes(d.split(',')[0])) || 
-                           loc.includes(routeStr);
+                    return (o && loc.includes(o.split(',')[0])) ||
+                        (d && loc.includes(d.split(',')[0])) ||
+                        loc.includes(routeStr);
                 });
-                
+
                 // Keep it concise, take top 3
                 communityReportsHighlights = matchedReports.slice(0, 3).map(r => `⚠️ ${r.incidentType}: ${r.location.substring(0, 25)}${r.location.length > 25 ? '...' : ''}`);
             } catch (e) {

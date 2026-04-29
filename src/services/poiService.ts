@@ -32,7 +32,7 @@ const ssGet = (key: string): SafetyPoi[] | null => {
 const ssPut = (key: string, data: SafetyPoi[]) => {
     const entry = { ts: Date.now(), data };
     cache.set(key, entry);
-    try { sessionStorage.setItem(SS_PREFIX + key, JSON.stringify(entry)); } catch {}
+    try { sessionStorage.setItem(SS_PREFIX + key, JSON.stringify(entry)); } catch { }
 };
 
 let overpassBlockedUntil = 0;

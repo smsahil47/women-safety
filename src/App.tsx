@@ -15,6 +15,7 @@ import SOSPage from './pages/SOSPage';
 import ContactsPage from './pages/ContactsPage';
 import ReportsPage from './pages/ReportsPage';
 import HeatmapPage from './pages/HeatmapPage';
+import LiveTrackPage from './pages/LiveTrackPage';
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
 
@@ -35,6 +36,8 @@ const AppRoutes: React.FC = () => {
       <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       <Route path="/update-password" element={<UpdatePasswordPage />} />
+      {/* Public live tracking page — no login needed */}
+      <Route path="/track/:sessionId" element={<LiveTrackPage />} />
 
       {/* Protected Routes */}
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

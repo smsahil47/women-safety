@@ -6,6 +6,11 @@ import type { ContactFormData, Relationship } from '../types';
 const RELS: Relationship[] = ['Mother', 'Father', 'Sister', 'Brother', 'Friend', 'Partner', 'Other'];
 const EMPTY: ContactFormData = { name: '', phone: '', relationship: 'Friend' };
 
+// Strip +91 prefix so the raw 10-digit value lives in state
+const stripPrefix = (v: string) => v.replace(/^\+91/, '').replace(/\D/g, '').slice(0, 10);
+// Always store with +91 so Twilio gets a fully-qualified number
+const withPrefix = (v: string) => `+91${v.replace(/\D/g, '').slice(0, 10)}`;
+
 const initials = (n: string) => n.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
 
 const ContactsPage: React.FC = () => {
@@ -19,8 +24,9 @@ const ContactsPage: React.FC = () => {
     const validate = () => {
         const e: { name?: string; phone?: string } = {};
         if (!form.name.trim()) e.name = 'Name is required';
-        if (!form.phone.trim()) e.phone = 'Phone number is required';
-        else if (!/^\+?[\d\s\-]{10,}$/.test(form.phone)) e.phone = 'Invalid phone number';
+        const digits = form.phone.replace(/\D/g, '');
+        if (!digits) e.phone = 'Phone number is required';
+        else if (digits.length !== 10) e.phone = 'Enter a valid 10-digit Indian mobile number';
         setErrors(e); return !Object.keys(e).length;
     };
 
@@ -29,7 +35,8 @@ const ContactsPage: React.FC = () => {
         if (!validate()) return;
         setSaving(true);
         try {
-            await addContact({ ...form, isNotified: false });
+            // Store phone with +91 prefix so Twilio always gets a complete number
+            await addContact({ ...form, phone: withPrefix(form.phone), isNotified: false });
             setForm(EMPTY); setErrors({}); setShowForm(false);
         } finally {
             setSaving(false);
@@ -81,10 +88,26 @@ const ContactsPage: React.FC = () => {
                         </div>
                         <div className="field">
                             <label className="label-text">Phone number *</label>
-                            <input id="contact-phone" type="tel" value={form.phone}
-                                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                                placeholder="+91 98765 43210"
-                                className={`input${errors.phone ? ' err' : ''}`} />
+                            <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+                                <span style={{
+                                    display: 'flex', alignItems: 'center', padding: '0 10px',
+                                    background: 'var(--bg-subtle)', border: '1px solid var(--border)',
+                                    borderRight: 'none', borderRadius: '6px 0 0 6px',
+                                    fontSize: 13, fontWeight: 600, color: 'var(--text-2)',
+                                    whiteSpace: 'nowrap', userSelect: 'none'
+                                }}>+91</span>
+                                <input
+                                    id="contact-phone"
+                                    type="tel"
+                                    inputMode="numeric"
+                                    maxLength={10}
+                                    value={form.phone}
+                                    onChange={e => setForm(f => ({ ...f, phone: stripPrefix(e.target.value) }))}
+                                    placeholder="9876543210"
+                                    className={`input${errors.phone ? ' err' : ''}`}
+                                    style={{ borderRadius: '0 6px 6px 0', flex: 1 }}
+                                />
+                            </div>
                             {errors.phone && <span className="err-msg">{errors.phone}</span>}
                         </div>
                         <div className="field">

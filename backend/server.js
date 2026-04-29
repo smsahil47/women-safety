@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
+import { sendSMS } from './smsService.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -10,62 +11,7 @@ const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Fast2SMS API Key (Twilio Alternative) - Get 50rs free without card
-const fast2smsKey = process.env.FAST2SMS_API_KEY || '';
-
-// Helper to send real SMS
-async function sendSMS(phone, text) {
-    // 1. Try Fast2SMS First (If user created a free account)
-    if (fast2smsKey) {
-        try {
-            const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-            const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-                method: 'POST',
-                headers: { 'authorization': fast2smsKey, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ route: 'q', message: text, language: 'english', flash: 0, numbers: cleanPhone })
-            });
-            const data = await response.json();
-            
-            // Fast2SMS returns true/false in 'return' key
-            if (data.return === true) {
-                console.log(`[Fast2SMS] Sent to ${phone}:`, data.message);
-                return true;
-            } else {
-                console.warn(`[Fast2SMS Rejected Message]`, data.message);
-                // Deliberately fall through to try Textbelt since Fast2SMS refused it
-            }
-        } catch (err) {
-            console.error(`[Fast2SMS] Network Failed for ${phone}:`, err.message);
-        }
-    }
-
-    // 2. Try TextBelt - 100% Free Public API (1 free SMS per day without an account)
-    try {
-        console.log(`[Textbelt Free API] Attempting to send to ${phone}...`);
-        const response = await fetch('https://textbelt.com/text', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone: phone,      // Ensure it has country code if possible, e.g. +91
-                message: text,
-                key: 'textbelt'    // Special keyword for free tier
-            })
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-            console.log(`[Textbelt] Successfully sent free SMS to ${phone}!`);
-            return true;
-        } else {
-            console.log(`[Textbelt Queue] Rate limited or failed. Showing mock SMS instead:`);
-            console.log(`\n======================================\n[MOCK SMS] To: ${phone}\n[MESSAGE]: ${text}\n======================================\n`);
-            return false;
-        }
-    } catch (err) {
-        console.error(`[Fallback] Error sending SMS:`, err.message);
-        return false;
-    }
-}
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -165,6 +111,45 @@ app.delete('/api/contacts/:contactId', async (req, res) => {
     }
 });
 
+// ─── LIVE TRACKING ───────────────────────────────────────────────────────────
+
+app.post('/api/tracking/start', async (req, res) => {
+    const { userId, location } = req.body;
+    if (!userId) return res.status(400).json({ message: 'userId required' });
+    try {
+        // 1. Fetch user name
+        const { data: user } = await supabase.from('profiles').select('name').eq('id', userId).single();
+        const userName = user?.name || 'A user';
+
+        // 2. Fetch ALL emergency contacts
+        const { data: contacts } = await supabase
+            .from('emergency_contacts')
+            .select('phone, name')
+            .eq('user_id', userId);
+
+        // 3. Save tracking session to DB
+        const { data: session, error } = await supabase
+            .from('tracking_sessions')
+            .insert({ user_id: userId, status: 'active', started_at: new Date().toISOString() })
+            .select().single();
+        if (error) throw error;
+
+        console.log(`📍 Live tracking started for ${userName}, notifying ${contacts?.length || 0} contacts`);
+
+        // 4. Send SMS with live tracking page link
+        const liveTrackUrl = `${FRONTEND_URL}/track/${session.id}`;
+        const message = `📍 ${userName} has started Live Tracking and is sharing their real-time location with you.\nWatch live here: ${liveTrackUrl}`;
+
+        if (contacts && contacts.length > 0) {
+            await Promise.all(contacts.map(contact => sendSMS(contact.phone, message)));
+        }
+
+        res.json({ message: 'Tracking started and contacts notified', sessionId: session.id, notifiedCount: contacts?.length || 0 });
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to start tracking', error: err.message });
+    }
+});
+
 // ─── SOS ─────────────────────────────────────────────────────────────────────
 
 app.post('/api/sos/trigger', async (req, res) => {
@@ -175,12 +160,11 @@ app.post('/api/sos/trigger', async (req, res) => {
         const { data: user } = await supabase.from('profiles').select('name').eq('id', userId).single();
         const userName = user?.name || 'A user';
 
-        // 2. Fetch emergency contacts — honour the selected contactIds list if given
-        let query = supabase.from('emergency_contacts').select('phone, name').eq('user_id', userId);
-        if (contactIds && contactIds.length > 0) {
-            query = query.in('id', contactIds);
-        }
-        const { data: contacts } = await query;
+        // 2. Fetch ALL emergency contacts for this user — always notify everyone
+        const { data: contacts } = await supabase
+            .from('emergency_contacts')
+            .select('phone, name')
+            .eq('user_id', userId);
 
         // 3. Save SOS Alert to DB
         const { data, error } = await supabase
@@ -196,12 +180,11 @@ app.post('/api/sos/trigger', async (req, res) => {
             ? `https://maps.google.com/?q=${location.lat},${location.lng}` 
             : 'Location not provided';
             
-        const message = `🚨 URGENT SOS from ${userName}! They need help immediately. Location: ${mapLink}`;
+        const message = `🚨 URGENT SOS from ${userName}!\nThey need help immediately.\nLocation: ${mapLink}`;
 
         if (contacts && contacts.length > 0) {
-            for (const contact of contacts) {
-                await sendSMS(contact.phone, message);
-            }
+            // Send SMS to all contacts in parallel
+            await Promise.all(contacts.map(contact => sendSMS(contact.phone, message)));
         }
 
         res.json({ message: 'SOS triggered and SMS sent', alertId: data.id, notifiedCount: contacts?.length || 0 });
