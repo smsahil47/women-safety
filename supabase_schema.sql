@@ -101,11 +101,18 @@ CREATE TABLE IF NOT EXISTS public.tracking_sessions (
     status TEXT DEFAULT 'active',
     started_at TIMESTAMPTZ DEFAULT NOW(),
     ended_at TIMESTAMPTZ,
+    current_lat DOUBLE PRECISION,
+    current_lng DOUBLE PRECISION,
     battery_level INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE public.tracking_sessions ENABLE ROW LEVEL SECURITY;
 
+-- Owner can do everything
 CREATE POLICY "Users can manage their own tracking sessions"
     ON public.tracking_sessions FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Anyone with the link can read (needed for the /track/:sessionId public page)
+CREATE POLICY "Public can view tracking sessions"
+    ON public.tracking_sessions FOR SELECT USING (TRUE);

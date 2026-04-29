@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 import type { User, EmergencyContact, TrackingSession, SOSStatus, Toast, ToastType } from '../types';
 import { MOCK_TRACKING_SESSION } from '../services/mockData';
 import { supabase } from '../services/supabase';
@@ -340,7 +343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         try {
             // Call backend — saves session to DB AND sends SMS to all contacts
-            const response = await fetch('http://localhost:5000/api/tracking/start', {
+            const response = await fetch(`${BACKEND_URL}/api/tracking/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: user.id, location }),
@@ -348,8 +351,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (!response.ok) throw new Error('Backend unreachable');
             const data = await response.json();
             setActiveTrackingId(data.sessionId);
-            addToast(`📍 Live tracking started. ${data.notifiedCount} contact(s) notified via SMS.`, 'success');
+
+            if (data.smsDelivered > 0 && data.smsFailed === 0) {
+                addToast(`📍 Live tracking started. ${data.smsDelivered} contact(s) notified via SMS.`, 'success');
+            } else if (data.smsDelivered > 0 && data.smsFailed > 0) {
+                addToast(`📍 Tracking started. ${data.smsDelivered} notified, ${data.smsFailed} SMS(es) failed.`, 'warning');
+            } else if (data.smsFailed > 0) {
+                addToast(`📍 Tracking started, but SMS failed. Check your Twilio trial account — numbers must be verified.`, 'warning');
+            } else {
+                addToast(`📍 Live tracking started. ${data.notifiedCount} contact(s) notified.`, 'success');
+            }
         } catch (err) {
+
             console.warn('Backend tracking/start failed, saving locally:', err);
             // Fallback: save directly to Supabase without SMS
             try {
@@ -403,15 +416,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (user?.id) {
             try {
-                const response = await fetch('http://localhost:5000/api/sos/trigger', {
+                const response = await fetch(`${BACKEND_URL}/api/sos/trigger`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId: user.id, location, contactIds })
                 });
                 if (!response.ok) throw new Error('Backend failed to send SOS');
+                const data = await response.json();
                 setSosStatus('sent');
-                addToast('🚨 SOS Alert sent!', 'error');
+
+                if (data.smsDelivered > 0 && data.smsFailed === 0) {
+                    addToast(`🚨 SOS Alert sent to ${data.smsDelivered} contact(s)!`, 'error');
+                } else if (data.smsDelivered > 0) {
+                    addToast(`🚨 SOS sent. ${data.smsDelivered} notified, ${data.smsFailed} SMS(es) failed.`, 'warning');
+                } else {
+                    addToast(`🚨 SOS saved, but SMS delivery failed. Verify contact numbers in Twilio.`, 'warning');
+                }
             } catch (err) {
+
                 console.warn('Backend SOS call failed, falling back to database save:', err);
                 try {
                     await createSOSAlert(user.id, location);

@@ -21,6 +21,40 @@ app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', supabase: supabaseUrl ? 'configured' : 'missing', timestamp: new Date().toISOString() });
 });
 
+// ─── SMS TEST (Diagnostic) ─────────────────────────────────────────────────────
+
+app.post('/api/sms/test', async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ message: 'phone is required' });
+    const result = await sendSMS(phone, `📱 SafeRoute test message. Twilio is working correctly!`);
+    if (result.sent) {
+        res.json({ success: true, message: `SMS delivered to ${phone}` });
+    } else {
+        res.status(500).json({ success: false, message: 'SMS failed', error: result.error, code: result.code });
+    }
+});
+
+// Debug: list all contacts + send test SMS to each (DEV ONLY)
+app.get('/api/debug/contacts', async (_req, res) => {
+    try {
+        const { data: contacts, error } = await supabase
+            .from('emergency_contacts')
+            .select('id, name, phone, user_id')
+            .limit(20);
+        if (error) throw error;
+
+        // Test SMS to each stored number
+        const results = await Promise.all((contacts || []).map(async (c) => {
+            const r = await sendSMS(c.phone, `📱 SafeRoute debug: testing SMS to ${c.name}`);
+            return { name: c.name, phone: c.phone, userId: c.user_id, sent: r.sent, error: r.error, code: r.code };
+        }));
+
+        res.json({ totalContacts: contacts?.length || 0, results });
+    } catch (err) {
+        res.status(500).json({ message: 'Debug failed', error: err.message });
+    }
+});
+
 // ─── REPORTS ─────────────────────────────────────────────────────────────────
 
 app.get('/api/reports', async (_req, res) => {
@@ -140,11 +174,32 @@ app.post('/api/tracking/start', async (req, res) => {
         const liveTrackUrl = `${FRONTEND_URL}/track/${session.id}`;
         const message = `📍 ${userName} has started Live Tracking and is sharing their real-time location with you.\nWatch live here: ${liveTrackUrl}`;
 
+        let smsDelivered = 0;
+        const smsErrors = [];
         if (contacts && contacts.length > 0) {
-            await Promise.all(contacts.map(contact => sendSMS(contact.phone, message)));
+            const results = await Promise.all(contacts.map(contact => sendSMS(contact.phone, message)));
+            results.forEach((r, i) => {
+                if (r.sent) {
+                    smsDelivered++;
+                } else {
+                    smsErrors.push({ name: contacts[i].name, phone: contacts[i].phone, error: r.error, code: r.code });
+                }
+            });
         }
 
-        res.json({ message: 'Tracking started and contacts notified', sessionId: session.id, notifiedCount: contacts?.length || 0 });
+        if (smsErrors.length > 0) {
+            console.warn(`⚠️  ${smsErrors.length} SMS(es) failed to deliver:`, smsErrors);
+        }
+
+        res.json({
+            message: 'Tracking started',
+            sessionId: session.id,
+            notifiedCount: contacts?.length || 0,
+            smsDelivered,
+            smsFailed: smsErrors.length,
+            smsErrors: smsErrors.length > 0 ? smsErrors : undefined,
+        });
+
     } catch (err) {
         res.status(500).json({ message: 'Failed to start tracking', error: err.message });
     }
@@ -175,19 +230,39 @@ app.post('/api/sos/trigger', async (req, res) => {
         
         console.log(`🚨 SOS triggered for user ${userId} (${userName}), notifying ${contacts?.length || 0} contacts`);
 
-        // 4. Send SMS to selected contacts
+        // 4. Send SMS to all contacts
         const mapLink = location?.lat && location?.lng 
             ? `https://maps.google.com/?q=${location.lat},${location.lng}` 
             : 'Location not provided';
             
         const message = `🚨 URGENT SOS from ${userName}!\nThey need help immediately.\nLocation: ${mapLink}`;
 
+        let smsDelivered = 0;
+        const smsErrors = [];
         if (contacts && contacts.length > 0) {
-            // Send SMS to all contacts in parallel
-            await Promise.all(contacts.map(contact => sendSMS(contact.phone, message)));
+            const results = await Promise.all(contacts.map(contact => sendSMS(contact.phone, message)));
+            results.forEach((r, i) => {
+                if (r.sent) {
+                    smsDelivered++;
+                } else {
+                    smsErrors.push({ name: contacts[i].name, phone: contacts[i].phone, error: r.error, code: r.code });
+                }
+            });
         }
 
-        res.json({ message: 'SOS triggered and SMS sent', alertId: data.id, notifiedCount: contacts?.length || 0 });
+        if (smsErrors.length > 0) {
+            console.warn(`⚠️  ${smsErrors.length} SOS SMS(es) failed:`, smsErrors);
+        }
+
+        res.json({
+            message: 'SOS triggered',
+            alertId: data.id,
+            notifiedCount: contacts?.length || 0,
+            smsDelivered,
+            smsFailed: smsErrors.length,
+            smsErrors: smsErrors.length > 0 ? smsErrors : undefined,
+        });
+
     } catch (err) {
         res.status(500).json({ message: 'Failed to trigger SOS', error: err.message });
     }

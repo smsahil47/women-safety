@@ -35,10 +35,15 @@ const TrackingPage: React.FC = () => {
     useEffect(() => {
         if (active && activeTrackingId && currentLocation) {
             const push = async () => {
-                await supabase
+                const { error } = await supabase
                     .from('tracking_sessions')
                     .update({ current_lat: currentLocation[0], current_lng: currentLocation[1] })
                     .eq('id', activeTrackingId);
+                if (error) {
+                    console.error('[LiveTracking] Failed to push GPS to Supabase:', error.message, error.code);
+                } else {
+                    console.log(`[LiveTracking] GPS pushed: ${currentLocation[0].toFixed(5)}, ${currentLocation[1].toFixed(5)}`);
+                }
             };
             push(); // immediate push
             locationPushRef.current = setInterval(push, 5000);
@@ -49,6 +54,7 @@ const TrackingPage: React.FC = () => {
             if (locationPushRef.current) clearInterval(locationPushRef.current);
         };
     }, [active, activeTrackingId, currentLocation]);
+
 
     const [elapsed, setElapsed] = useState('00:00');
 

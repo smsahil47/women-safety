@@ -16,9 +16,10 @@ if (accountSid && authToken) {
  * Format phone number for Twilio (ensure country code +91 for India if missing)
  */
 function formatPhone(phone) {
+    // Strip ALL non-digit characters (spaces, dashes, parentheses, +)
     const cleanPhone = phone.replace(/\D/g, '');
     
-    // Already has country code +91 (12 digits starting with 91)
+    // Already has country code 91 (12 digits starting with 91)
     if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
         return `+${cleanPhone}`;
     }
@@ -28,12 +29,12 @@ function formatPhone(phone) {
         return `+91${cleanPhone}`;
     }
     
-    // Any other length with digits — prepend +
+    // Any other length — just prepend +
     if (cleanPhone.length > 10) {
         return `+${cleanPhone}`;
     }
     
-    return phone; // Fallback
+    return phone; // Fallback (shouldn't happen)
 }
 
 /**
@@ -53,17 +54,25 @@ export const sendSMS = async (phone, text) => {
                 to: formattedPhone
             });
             console.log(`✅ [Twilio] Successfully sent SMS to ${formattedPhone} (SID: ${message.sid})`);
-            return true;
+            return { sent: true };
         } catch (err) {
-            console.error(`❌ [Twilio] Failed to send SMS to ${formattedPhone}:`, err.message);
-            // Fallback to console mock below on failure
+            // Common Twilio trial errors:
+            // 21608 = unverified number (trial account restriction)
+            // 21211 = invalid phone number
+            const code = err.code || err.status || 'unknown';
+            console.error(`❌ [Twilio] Failed to send SMS to ${formattedPhone} (code ${code}):`, err.message);
+            if (code === 21608) {
+                console.error(`   ⚠️  TRIAL ACCOUNT: ${formattedPhone} is not a verified Twilio number.`);
+                console.error(`   ➡️  Verify it at: https://www.twilio.com/console/phone-numbers/verified`);
+            }
+            return { sent: false, error: err.message, code };
         }
     }
     
-    // Console Mock Fallback
+    // Console Mock Fallback (no Twilio credentials configured)
     console.log(`\n======================================`);
     console.log(`[MOCK SMS FALLBACK] To: ${formattedPhone}`);
     console.log(`[MESSAGE]:\n${text}`);
     console.log(`======================================\n`);
-    return false;
+    return { sent: false, error: 'Twilio not configured (mock fallback)', code: 'no_credentials' };
 };
